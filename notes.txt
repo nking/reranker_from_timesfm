@@ -1,0 +1,51 @@
+rough sketch for feasibility before design docs:
+
+goal is to create a real-time re-ranker for the movielens 
+recommendations that uses the time information to re-rerank results.
+
+The TimesFM2.5 pretrained model can predict ratings quantiles
+with dynamic covariates that hold movie embeddings and time
+information, and future covariates that hold candidate movie
+embeddings and time information.
+
+With a horizon of 1 and time=now for each candidate movie,
+the results are scored using percents of the quantiles.
+
+The overall point-wise comparison can be efficient even for 200
+or so candidates due to JAX/Flax backend and running on a GPU.
+
+tfm_model = timesfm.TimesFm(
+    context_len=1024,
+    horizon_len=1,
+    conf_interval=[0.1, 0.5, 0.9],
+    backend="gpu",
+    use_continuous_quantile_head=True 
+)
+
+tiling with JAX ... to broadcast
+
+example: 
+n = 100 ratings for a user
+horizon = 1
+- target_ratings is an array of users ratings of length n.
+- movie_embeddings is an array of length n.
+  each embedding is:
+   [movie_embedding, hour_sin, hour_cos, day_sin, day_cos,
+   month_sin, month_cos, is_holiday]
+   where hour_sin, for example, is sin(2*pi*hour/24)
+   where month_sin, for example, is sin(2*pi*month/12)
+- candidate_movies is an array of length horizon;
+  each embedding is:
+   [movie_embedding, hour_now_sin, hour_now_cos,
+   day_now_sin, day_now_cos, month_now_sin, month_now_cos, is_holiday]
+
+fm_model.forecast_with_covariates(
+  inputs=[target_ratings],
+  dynamic_covariates=[movie_embeddings],
+  future_covariates=[candidate_movies], horizon=horizon)
+
+-- follow up on FITS (Fourier Interpolation Time Series) for IoT
+
+
+
+
