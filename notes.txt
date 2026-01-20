@@ -3,6 +3,9 @@ rough sketch for feasibility before design docs:
 goal is to create a real-time re-ranker for the movielens 
 recommendations that uses the time information to re-rerank results.
 
+TimesFM2.5 can provide sequential context calibration through the 
+seasonality in the dynamic covariate data.
+
 The TimesFM2.5 pretrained model can predict ratings quantiles
 with dynamic covariates that hold movie embeddings and time
 information, and future covariates that hold candidate movie
@@ -39,10 +42,37 @@ horizon = 1
    [movie_embedding, hour_now_sin, hour_now_cos,
    day_now_sin, day_now_cos, month_now_sin, month_now_cos, is_holiday]
 
-fm_model.forecast_with_covariates(
-  inputs=[target_ratings],
-  dynamic_covariates=[movie_embeddings],
-  future_covariates=[candidate_movies], horizon=horizon)
+this gets modified for batched inputs from jnp.tile:
+  fm_model.forecast_with_covariates(
+    inputs=[target_ratings],
+    dynamic_covariates=[movie_embeddings],
+    future_covariates=[candidate_movies], horizon=horizon)
+
+P10: is safe rank.  
+  model is confident that user won't hate it.
+  has the lowest probability of a negative event.
+P50: is moderate rank
+  the median, expected rating
+P90: is risky, exploration rank.  
+  has highest probability of a negative outcome
+  polarizing, user might love or hate it.
+
+for each movie:
+final_score = (0.7 * P50) + (0.3 * P90)
+
+#here are some notes on distributed batch inference w/JAX:
+import jax.numpy as jnp
+batched_history = jnp.tile(target_ratings, (num_candidates, 1)) 
+batched_dynamic_cov = jnp.tile(movie_embeddings, (num_candidates, 1, 1))batched_candidates = candidate_pool[:, jnp.newaxis, :]
+forecast_output = model.forecast_with_covariates(
+    inputs=batched_history,
+    dynamic_covariates=batched_dynamic_cov,
+    future_covariates=batched_candidates,
+    horizon=1
+)
+predicted_ratings = forecast_output.point_forecast
+
+
 
 -- follow up on FITS (Fourier Interpolation Time Series) for IoT
 
